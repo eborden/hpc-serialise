@@ -1,9 +1,5 @@
 {-# LANGUAGE CPP #-}
-#if __GLASGOW_HASKELL__ >= 709
-{-# LANGUAGE Safe #-}
-#elif __GLASGOW_HASKELL__ >= 701
-{-# LANGUAGE Trustworthy #-}
-#endif
+{-# LANGUAGE DeriveGeneric #-}
 ---------------------------------------------------------------
 -- Colin Runciman and Andy Gill, June 2006
 ---------------------------------------------------------------
@@ -16,12 +12,15 @@ module Trace.Hpc.Mix
         , BoxLabel(..)
         , CondBox(..)
         , mixCreate
+        , mixCreate'
         , readMix
+        , readMix'
         , createMixEntryDom
         , MixEntryDom
         )
   where
 
+import Codec.Serialise
 import Data.List
 import Data.Maybe (catMaybes, fromMaybe)
 import Data.Time (UTCTime)
@@ -31,6 +30,7 @@ import Text.Read (readMaybe)
 #else
 import Data.Char (isSpace)
 #endif
+import GHC.Generics
 
 import System.FilePath
 
@@ -38,8 +38,8 @@ import System.FilePath
 -- been introduced in that module, accessed by tick-number position
 -- in the list
 
-import Trace.Hpc.Util (HpcPos, insideHpcPos, Hash, HpcHash(..), catchIO)
 import Trace.Hpc.Tix
+import Trace.Hpc.Util (Hash, HpcHash(..), HpcPos, catchIO, insideHpcPos)
 
 #if !MIN_VERSION_base(4,6,0)
 readMaybe :: Read a => String -> Maybe a
@@ -61,7 +61,9 @@ data Mix = Mix
              Hash               -- hash of mix entry + timestamp
              Int                -- tab stop value.
              [MixEntry]         -- entries
-        deriving (Show,Read,Eq)
+        deriving (Show,Read,Eq,Generic)
+
+instance Serialise Mix
 
 type MixEntry = (HpcPos, BoxLabel)
 
@@ -69,12 +71,16 @@ data BoxLabel = ExpBox  Bool -- isAlt
               | TopLevelBox [String]
               | LocalBox [String]
               | BinBox CondBox Bool
-              deriving (Read, Show, Eq, Ord)
+              deriving (Read, Show, Eq, Ord, Generic)
+
+instance Serialise BoxLabel
 
 data CondBox = GuardBinBox
              | CondBinBox
              | QualBinBox
-              deriving (Read, Show, Eq, Ord)
+              deriving (Read, Show, Eq, Ord, Generic)
+
+instance Serialise CondBox
 
 instance HpcHash BoxLabel where
    toHash (ExpBox b)       = 0x100 + toHash b
@@ -96,6 +102,14 @@ mixCreate :: String -- ^ Dir Name
 mixCreate dirName modName mix =
    writeFile (mixName dirName modName) (show mix)
 
+-- | Create is mix file.
+mixCreate' :: String -- ^ Dir Name
+          -> String -- ^ module Name
+          -> Mix    -- ^ Mix DataStructure
+          -> IO ()
+mixCreate' dirName modName mix =
+   writeFileSerialise (mixName dirName modName) mix
+
 -- | Read a mix file.
 readMix :: [String]                 -- ^ Dir Names
         -> Either String TixModule  -- ^ module wanted
@@ -109,7 +123,32 @@ readMix dirNames mod' = do
                          case mod' of
                             Left  _   -> return $ Just mix -- Bypass hash check
                             Right tix -> return $ checkHash tix mix mixPath)
-                     `catchIO` (\ _ -> return $ Nothing)
+                     `catchIO` (\ _ -> return Nothing)
+                   | dirName <- dirNames
+                   ]
+   case catMaybes res of
+     xs@(x:_:_) | any (/= x) (tail xs) ->
+              -- Only complain if multiple *different* `Mix` files with the
+              -- same name are found (#9619).
+              error $ "found " ++ show(length xs) ++ " different instances of "
+                      ++ modName ++ " in " ++ intercalate ", " dirNames
+     (x:_) -> return x
+     _     -> error $ "can not find "
+                      ++ modName ++ " in " ++ intercalate ", " dirNames
+
+-- | Read a mix file.
+readMix' :: [String]                 -- ^ Dir Names
+        -> Either String TixModule  -- ^ module wanted
+        -> IO Mix
+readMix' dirNames mod' = do
+
+   let modName = either id tixModuleName mod'
+   res <- sequence [ (do let mixPath    = mixName dirName modName
+                         mix <- readFileDeserialise mixPath
+                         case mod' of
+                            Left  _   -> return $ Just mix -- Bypass hash check
+                            Right tix -> return $ checkHash tix mix mixPath)
+                     `catchIO` (\ _ -> return Nothing)
                    | dirName <- dirNames
                    ]
    case catMaybes res of

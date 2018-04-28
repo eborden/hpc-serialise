@@ -1,7 +1,6 @@
 {-# LANGUAGE CPP #-}
-#ifdef __GLASGOW_HASKELL__
-{-# LANGUAGE Safe #-}
-#endif
+{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 -----------------------------------------
 -- Andy Gill and Colin Runciman, June 2006
 ------------------------------------------
@@ -18,14 +17,18 @@ module Trace.Hpc.Util
        , catchIO
        ) where
 
+import Codec.Serialise
 import qualified Control.Exception as Exception
-import Data.List(foldl')
-import Data.Char (ord)
 import Data.Bits (xor)
+import Data.Char (ord)
+import Data.List (foldl')
 import Data.Word
+import GHC.Generics
 
 -- | 'HpcPos' is an Hpc local rendition of a Span.
-data HpcPos = P !Int !Int !Int !Int deriving (Eq, Ord)
+data HpcPos = P !Int !Int !Int !Int deriving (Eq, Ord, Generic)
+
+instance Serialise HpcPos
 
 -- | 'fromHpcPos' explodes the HpcPos into /line:column/-/line:column/
 fromHpcPos :: HpcPos -> (Int,Int,Int,Int)
@@ -66,7 +69,7 @@ instance Read HpcPos where
 class HpcHash a where
   toHash :: a -> Hash
 
-newtype Hash = Hash Word32 deriving (Eq)
+newtype Hash = Hash Word32 deriving (Eq, Serialise)
 
 instance Read Hash where
   readsPrec p n = [ (Hash v,rest)

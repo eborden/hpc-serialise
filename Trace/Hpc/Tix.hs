@@ -1,11 +1,4 @@
 {-# LANGUAGE CPP #-}
-#if __GLASGOW_HASKELL__ >= 704
-{-# LANGUAGE Safe #-}
-#elif __GLASGOW_HASKELL__ >= 702
--- System.FilePath in filepath version 1.2.0.1 isn't marked or implied Safe,
--- as shipped with GHC 7.2.
-{-# LANGUAGE Trustworthy #-}
-#endif
 ------------------------------------------------------------
 -- Andy Gill and Colin Runciman, June 2006
 ------------------------------------------------------------

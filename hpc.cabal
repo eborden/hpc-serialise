@@ -39,5 +39,16 @@ Library
         containers >= 0.4.1 && < 0.6,
         directory  >= 1.1   && < 1.4,
         filepath   >= 1     && < 1.5,
-        time       >= 1.2   && < 1.9
+        time       >= 1.2   && < 1.9,
+        serialise  >= 0.1   && < 0.2
     ghc-options: -Wall
+
+benchmark bench
+    type: exitcode-stdio-1.0
+    main-is: Main.hs
+    hs-source-dirs: bench
+    build-depends:
+        base,
+        criterion,
+        hpc
+
